@@ -1,5 +1,4 @@
 import express, { Request, Response } from 'express'
-import path from 'path'
 import { connectDB } from './app'
 
 const router = express.Router()
@@ -22,12 +21,11 @@ router.post('/login', async (req: Request, res: Response) => {
       password
     )
     if (!user) {
-      return res
-        .status(401)
-        .json({ success: false, error: 'Invalid credentials' })
+      console.log('Usuário não encontrado')
+      return res.status(401).json({ success: false })
     }
 
-    return res.json({ success: true, message: 'Login successful', user })
+    return res.json({ success: true, user })
   } catch (err) {
     console.log(err)
     res.status(500).json({ success: false, error: 'Internal server error' })
@@ -46,14 +44,33 @@ router.get('/home/:userId', async (req: Request, res: Response) => {
       `SELECT * FROM classes WHERE id IN (SELECT class_id FROM class_students WHERE student_id = ?)`,
       userIdNumber
     )
-    return res.json({ success: true, classes })
+    const teacherIds = classes.map((classItem: any) => classItem.teacher_id)
+    const uniqueTeacherIds = [...new Set(teacherIds)]
+
+    const teachers = await database.all(
+      `SELECT * FROM users WHERE id IN (${uniqueTeacherIds
+        .map(() => '?')
+        .join(',')})`,
+      ...uniqueTeacherIds
+    )
+    const data = classes.map((classItem: any) => {
+      const teacher = teachers.find(
+        (teacher: any) => teacher.id === classItem.teacher_id
+      )
+
+      const { teacher_id, ...classWithoutTeacherId } = classItem
+
+      return {
+        ...classWithoutTeacherId,
+        teacher,
+      }
+    })
+
+    return res.json({ success: true, data })
   } catch (err) {
     console.log(err)
     res.status(500).json({ success: false, error: 'Internal server error' })
   }
 })
-
-// Rota para imagens
-router.use('/images', express.static(path.join(__dirname, 'images')))
 
 export default router
